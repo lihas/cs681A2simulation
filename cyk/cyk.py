@@ -4,6 +4,7 @@ import sys
 import os
 #sentence="is_BEZ also_RB not_NOT doing_VBG".split()
 sentence="have_HV not_NOT been_BEN going_VBG".split()
+#sentence="could_MD also_RB not_NOT have_HV been_BEN going_VBG".split()
 sentence_length=len(sentence)
 
 grammar=nltk.data.load("file:cfg_rules.cfg")
@@ -12,7 +13,16 @@ for i in grammar.productions():
     prod='##'
     for j in i.rhs():
         prod+=str(j)+'##'
-    grammar_dict[prod]=str(i.lhs())
+    if prod in grammar_dict.keys():
+        if type(grammar_dict[prod]) is list:
+            grammar_dict[prod].append(str(i.lhs()))
+        else:
+            lpp=[]
+            lpp.append(grammar_dict[prod])
+            lpp.append(str(i.lhs()))
+            grammar_dict[prod]=lpp
+    else:
+        grammar_dict[prod]=str(i.lhs())
 
 #def getRhsProd(v1,v2):
 #    for i in grammar.productions():
@@ -45,11 +55,22 @@ for i in range(0,sentence_length):
             kk+=1;
             pr=getRhsProd(list_2d[i][k],list_2d[kk+j][j])
             if pr:
-                if list_2d[i][j]=='':
-                    list_2d[i][j]=pr;
+                if type(pr) is list:
+                    for ii in pr:
+                        if os.fork()==0:
+                            list_2d[i][j]=ii
+                            break
                 else:
-                    if os.fork()==0:
-                        list_2d=pr;
+                    list_2d[i][j]=pr
+                #if list_2d[i][j]=='':
+                #    list_2d[i][j]=pr;
+                #else:
+                #    print("multi")
+                #    if os.fork()==0:
+                #        list_2d=pr;
+                #        print("child")
+                #    else:
+                #        print("parent")
                 list_2d_coords[i][j]=[[i,k],[kk+j,j]]
 
 #for i in list_2d:
@@ -63,7 +84,8 @@ for i in range(0,sentence_length):
 
 
 #prin=sys.stdout.write
-prin=open("output/"+str(os.getpid()),"w").write;
+file=open("output/"+str(os.getpid()),"w");
+prin=file.write
 
 def printTree(i,j):
     if list_2d_coords[i][j]==-1:
@@ -81,3 +103,4 @@ def printTree(i,j):
     prin(")")
 
 printTree(sentence_length-1,0);
+file.close()
