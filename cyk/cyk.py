@@ -2,7 +2,8 @@ __author__ = 'neo'
 import nltk
 import sys
 import os
-sentence="is_BEZ also_RB not_NOT doing_VBG".split()
+#sentence="is_BEZ also_RB not_NOT doing_VBG".split()
+sentence="have_HV not_NOT been_BEN going_VBG".split()
 sentence_length=len(sentence)
 
 grammar=nltk.data.load("file:cfg_rules.cfg")
