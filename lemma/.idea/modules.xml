@@ -1,0 +1,11 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<project version="4">
+  <component name="ProjectModuleManager">
+    <modules>
+      <module fileurl="file://$PROJECT_DIR$/../cyk/.idea/cyk.iml" filepath="$PROJECT_DIR$/../cyk/.idea/cyk.iml" />
+      <module fileurl="file://$PROJECT_DIR$/.idea/lemma.iml" filepath="$PROJECT_DIR$/.idea/lemma.iml" />
+      <module fileurl="file://$PROJECT_DIR$/../posTag/.idea/posTag.iml" filepath="$PROJECT_DIR$/../posTag/.idea/posTag.iml" />
+    </modules>
+  </component>
+</project>
+
