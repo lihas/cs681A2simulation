@@ -271,7 +271,7 @@ class distribution:
 
         :param distribution_parameters: parameters to characterise a distribution, some examples:-
 
-        type=distributionType.constant,mean=2
+        type=distributionType.constant,value=2 #delta function ?
         type=distributionType.uniform,a=2,b=3 (starting and ending, default=0,1)
         type=distributionType.normal,mean=2,variance=3
         type=distributionType.exponential,lambda=2
@@ -283,8 +283,46 @@ class distribution:
         s=self
         self.__type=distribution_parameters['type']
 
-        if s.type==distributionType.exponential:
-            s.__lambda=distribution_parameters['lambda']
+        if s.__type==distributionType.constant:
+            s.__value=float(distribution_parameters['value'])
+
+        elif s.__type==distributionType.uniform:
+            if len(distribution_parameters)==1: #a and b not specified, assuming uniform in [0,1]
+                s.__a=0.0
+                s.__b=1.0
+            elif len(distribution_parameters)==3: #a and b both specified for uniform distribution
+                s.__a=float(distribution_parameters['a'])
+                s.__b=float(distribution_parameters['b'])
+            else:
+                raise Exception('Improper number of arguments for uniform distribution')
+
+        elif s.__type==distributionType.normal:
+            s.__mean=float(distribution_parameters['mean'])
+            s.__variance=float(distribution_parameters['variance'])
+
+        elif s.type==distributionType.exponential:
+            s.__lambda=float(distribution_parameters['lambda'])
+
+        else:
+            raise Exception('unknown distribution')
+
+    def sample(self):
+        s=self
+        if s.__type==distributionType.constant:
+          return s.__value
+
+        elif s.__type==distributionType.uniform:
+            return random.uniform(s.__a,s.__b)
+
+        elif s.__type==distributionType.normal:
+            return random.gauss(s.__mean,(s.__variance)**2)
+
+        elif s.type==distributionType.exponential:
+            return -(1.0/s.__lambda)*math.log(1.0-random.uniform(0,1)) #by default log is with base e
+
+        else:
+            raise Exception('Distribution not handled by sample()')
+
 
 
 
