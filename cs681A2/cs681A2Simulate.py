@@ -23,7 +23,7 @@ class system:
         :param max_threads: integer
         :param buffer_size: integer
         """
-        raise NotImplementedError
+
         # self.arrivalRate=None #Not needed since it will be determined by think time and number of users
         self.serviceTime = None
         self.thinkTime = None
@@ -36,6 +36,8 @@ class system:
 
         self.processors = []  # list of processors
         self.threadPool=threadPool(self)
+
+        raise NotImplementedError
 
 
 
@@ -237,7 +239,7 @@ class processor:
 class simulation:
     def __init__(self, threadPoolSize, bufferSize, numberOfClients,systemObject,seed):
         #self.processors = []  #Moved to system list of processors
-        self.evenlist = eventList()
+        self.eventlist = eventList()
         self.initializeProcessors(systemObject.numberOfProcessors)
         self.initializeThreadPool(threadPoolSize)
         self.initializeBuffer(bufferSize)
