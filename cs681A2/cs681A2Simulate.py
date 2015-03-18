@@ -33,12 +33,23 @@ class system:
         self.timeQuantumRoundRobin = None  #Integer
         self.maxThreads = None  #Integer
         self.maxBuffer = None  #Integer
-
         self.processors = []  # list of processors
         self.threadPool=threadPool(self)
 
+        self.initializeProcessors(number_of_processors)
+        self.initializeThreadPool(max_threads)
+        self.initializeBuffer(buffer_size)
+
         raise NotImplementedError
 
+    def initializeProcessors(self, number_of_processors):
+        raise NotImplementedError
+
+    def initializeThreadPool(self, max_threads):
+        raise NotImplementedError
+
+    def initializeBuffer(self, buffer_size):
+        raise NotImplementedError
 
 
 class request:
@@ -237,14 +248,10 @@ class processor:
 
 
 class simulation:
-    def __init__(self, threadPoolSize, bufferSize, numberOfClients,systemObject,seed):
+    def __init__(self, numberOfClients,systemObject,seed):
         #self.processors = []  #Moved to system list of processors
         self.eventlist = eventList()
-        self.initializeProcessors(systemObject.numberOfProcessors)
-        self.initializeThreadPool(threadPoolSize)
-        self.initializeBuffer(bufferSize)
         self.initializeReqeustList(numberOfClients)
-
         random.seed(seed)
 
     def eventHandler(self, event):
@@ -254,15 +261,6 @@ class simulation:
         """
         Start simulation
         """
-
-    def initializeProcessors(self, numberOfProcessors):
-        raise NotImplementedError
-
-    def initializeThreadPool(self, threadPoolSize):
-        raise NotImplementedError
-
-    def initializeBuffer(self, bufferSize):
-        raise NotImplementedError
 
     def initializeReqeustList(self, numberOfClients):
         raise NotImplementedError
