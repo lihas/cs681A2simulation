@@ -1,13 +1,9 @@
 __author__ = 'neo'
 
-import math
+import math,random
 
 
-def setRandomNumerSeed(seed):
-    """
-    initialize random number generator with seed
-    """
-    pass
+
 
 
 class system:
@@ -37,7 +33,7 @@ class system:
         self.timeQuantumRoundRobin = None  #Integer
         self.maxThreads = None  #Integer
         self.maxBuffer = None  #Integer
-        setRandomNumerSeed(None)
+
 
 
 class request:
@@ -236,14 +232,15 @@ class processor:
 
 
 class simulation:
-    def __init__(self, numberOfProcessors, threadPoolSize, bufferSize, numberOfClients):
+    def __init__(self, numberOfProcessors, threadPoolSize, bufferSize, numberOfClients,seed):
         self.processors = []  # list of processors
         self.evenlist = eventList()
-
         self.initializeProcessors(numberOfProcessors)
         self.initializeThreadPool(threadPoolSize)
         self.initializeBuffer(bufferSize)
         self.initializeReqeustList(numberOfClients)
+
+        random.seed(seed)
 
     def eventHandler(self, event):
         raise NotImplementedError
@@ -267,6 +264,29 @@ class simulation:
 
 
 #helper classes:-
+
+class distribution:
+    def __init__(self, **distribution_parameters):
+        """
+
+        :param distribution_parameters: parameters to characterise a distribution, some examples:-
+
+        type=distributionType.constant,mean=2
+        type=distributionType.uniform,a=2,b=3 (starting and ending, default=0,1)
+        type=distributionType.normal,mean=2,variance=3
+        type=distributionType.exponential,lambda=2
+
+        usage: d=distribution(type=distributionType.exponential,lambda=2)
+        will create an object of exponential distribution.
+        Each distribution will have a method sample() which will return a RV variable from that distribution
+        """
+        s=self
+        self.__type=distribution_parameters['type']
+
+        if s.type==distributionType.exponential:
+            s.__lambda=distribution_parameters['lambda']
+
+
 
 
 # #dictionaries / enums
