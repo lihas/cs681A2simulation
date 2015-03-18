@@ -35,6 +35,7 @@ class system:
         self.maxBuffer = None  #Integer
 
         self.processors = []  # list of processors
+        self.threadPool=threadPool(self)
 
 
 
