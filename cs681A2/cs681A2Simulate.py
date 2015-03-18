@@ -11,7 +11,7 @@ class system:
     Meta information about the system being simulated.
     """
 
-    def __init__(self,service_time,think_time,timeout,number_of_processors,context_switch_time,round_robin_time_qantum,max_threads,buffer_size):
+    def __init__(self,service_time_distribution_object,think_time_distribution_object,timeout_distribution_object,number_of_processors,context_switch_time_value,round_robin_time_quantum_value,max_threads,buffer_size):
         """
 
         :param service_time: Object of type distribution
@@ -25,31 +25,36 @@ class system:
         """
 
         # self.arrivalRate=None #Not needed since it will be determined by think time and number of users
-        self.serviceTime = None
-        self.thinkTime = None
-        self.timeout = None  #Object of type distribution
-        self.numberOfProcessors = None  #Integer
-        self.contextSwitchTime = None  #Integer
-        self.timeQuantumRoundRobin = None  #Integer
-        self.maxThreads = None  #Integer
-        self.maxBuffer = None  #Integer
+        self.serviceTime = service_time_distribution_object
+        self.thinkTime = think_time_distribution_object
+        self.timeout = timeout_distribution_object  #Object of type distribution
+        self.numberOfProcessors = number_of_processors  #Integer
+        self.contextSwitchTime = context_switch_time_value  #Integer
+        self.timeQuantumRoundRobin = round_robin_time_quantum_value  #Integer
+        self.maxThreads = max_threads  #Integer
+        self.buffer_size = buffer_size  #Integer
+
         self.processors = []  # list of processors
-        self.threadPool=threadPool(self)
+        self.threadPool=None #Object of type threadPool
+        self.buffer=None #Object of type buffer
+
 
         self.initializeProcessors(number_of_processors)
         self.initializeThreadPool(max_threads)
         self.initializeBuffer(buffer_size)
 
+
         raise NotImplementedError
 
     def initializeProcessors(self, number_of_processors):
-        raise NotImplementedError
+        for i in range(number_of_processors):
+            self.processors.append(processor(i))
 
     def initializeThreadPool(self, max_threads):
-        raise NotImplementedError
+        self.threadPool=threadPool(max_threads)
 
     def initializeBuffer(self, buffer_size):
-        raise NotImplementedError
+        self.buffer=buffer(buffer_size)
 
 
 class request:
@@ -79,9 +84,9 @@ class threadPool:
     index of threadList will be the thread id
     """
 
-    def __init__(self, systemObject):
+    def __init__(self, maxThreads):
         raise NotImplementedError
-        self.maxThreads = systemObject.maxThreads
+        self.maxThreads = maxThreads
         self.numberOfBusyThreads = None
         self.threadList = []
 
@@ -97,8 +102,8 @@ class buffer:
     If thread pool is full enque requests here
     """
 
-    def __init__(self, systemObject):
-        self.maxBuffer = systemObject.maxBuffer
+    def __init__(self, buffer_size):
+        self.buffer_size = buffer_size
         self.bufferList = []
 
     def addToBuffer(self, request):
@@ -120,7 +125,7 @@ class event:
     def __init__(self):
         self.__id = None #Do not set it explicitly, will be set by addEvent Method of eventList
         self.timestamp = None
-        self.eventType = None  # of type eventTypes()
+        self.eventType = None  # of type eventTypes.arrival ,etc.
         self.data = None  # interpret this according to eventType (see documentation of this class)
 
 
@@ -257,6 +262,15 @@ class simulation:
     def eventHandler(self, event):
         raise NotImplementedError
 
+    def createEvent(self,type,data,timestamp):
+        """
+
+        :param type: type of event. eventTypes.arrival , etc.
+        :param data: interpret this according to eventType (see documentation of event class)
+        :param timestamp: time at which event is scheduled to occur
+        """
+        raise NotImplementedError
+
     def startSimulation(self):
         """
         Start simulation
@@ -277,9 +291,9 @@ class distribution:
         type=distributionType.constant,value=2 #delta function ?
         type=distributionType.uniform,a=2,b=3 (starting and ending, default=0,1)
         type=distributionType.normal,mean=2,variance=3
-        type=distributionType.exponential,lambda=2
+        type=distributionType.exponential,lambda_val=2
 
-        usage: d=distribution(type=distributionType.exponential,lambda=2)
+        usage: d=distribution(type=distributionType.exponential,lambda_val=2)
         will create an object of exponential distribution.
         Each distribution will have a method sample() which will return a RV variable from that distribution
         """
@@ -304,7 +318,7 @@ class distribution:
             s.__variance=float(distribution_parameters['variance'])
 
         elif s.type==distributionType.exponential:
-            s.__lambda=float(distribution_parameters['lambda'])
+            s.__lambda=float(distribution_parameters['lambda_val'])
 
         else:
             raise Exception('unknown distribution')
@@ -361,3 +375,6 @@ class distributionType:
     exponential = 3
 
 
+#main code
+system=system(distribution(type=distributionType.uniform,a=10,b=16),distribution(type=distributionType.uniform,a=4,b=8),distribution(type=distributionType.uniform(a=10,b=20)),1,2,4,10,10)
+simulation=simulation(6,system,2)
