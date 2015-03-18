@@ -34,6 +34,8 @@ class system:
         self.maxThreads = None  #Integer
         self.maxBuffer = None  #Integer
 
+        self.processors = []  # list of processors
+
 
 
 class request:
@@ -232,10 +234,10 @@ class processor:
 
 
 class simulation:
-    def __init__(self, numberOfProcessors, threadPoolSize, bufferSize, numberOfClients,seed):
-        self.processors = []  # list of processors
+    def __init__(self, threadPoolSize, bufferSize, numberOfClients,systemObject,seed):
+        #self.processors = []  #Moved to system list of processors
         self.evenlist = eventList()
-        self.initializeProcessors(numberOfProcessors)
+        self.initializeProcessors(systemObject.numberOfProcessors)
         self.initializeThreadPool(threadPoolSize)
         self.initializeBuffer(bufferSize)
         self.initializeReqeustList(numberOfClients)
@@ -247,7 +249,7 @@ class simulation:
 
     def startSimulation(self):
         """
-        Start simmulation
+        Start simulation
         """
 
     def initializeProcessors(self, numberOfProcessors):
