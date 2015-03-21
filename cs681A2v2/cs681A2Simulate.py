@@ -30,12 +30,10 @@ class System:
         @processors:        A list of all the processor objects in the system.
         @threadPool:        The threadpool object of the system.
         @reqBuffer:         The buffer object of the system.
-        @numUsers:          The number of users in the system.
     """
 
     def __init__(self, serviceTimeDist, thinkTimeDist, timeoutDist, numProcs,
-                 contextSwitchTime, timeQuantum, maxThreads, bufferSize,
-                 numUsers):
+                 contextSwitchTime, timeQuantum, maxThreads, bufferSize):
         self.serviceTime = serviceTimeDist
         self.thinkTime = thinkTimeDist
         self.timeout = timeoutDist
@@ -44,7 +42,7 @@ class System:
         self.timeQuantum = timeQuantum
         self.maxThreads = maxThreads
         self.bufferSize = bufferSize
-        self.numUsers = numUsers #TODO: move numUsers to simulation class since it is not a system parameter
+
 
         self.processors = []
 
@@ -414,7 +412,7 @@ class Simulation:
         config.read('simulation.cfg')
 
         self.randomSeed = config.getint('System', 'randomSeed')
-        self.numClients=config.getint('System', 'numUsers')
+        self.numClients=config.getint('Simulation', 'numClients')
 
         serviceTimeDist = self.GetDistributionObject(config, 'ServiceTime')
         thinkTimeDist = self.GetDistributionObject(config, 'ThinkTime')
@@ -425,13 +423,12 @@ class Simulation:
                              config.getfloat('Processor', 'contextSwitchTime'),
                              config.getfloat('Processor', 'timeQuantum'),
                              config.getint('System', 'maxThreads'),
-                             config.getint('System', 'bufferSize'),
-                             config.getint('System', 'numUsers'))
+                             config.getint('System', 'bufferSize'))
 
         self.eventList = EventList()
 
         self.requestList=[]
-        #self.InitRequestList(numberOfClients=)
+        self.InitRequestList(numberOfClients=self.numClients,self.system.clock)
 
     def GetDistributionObject(self, config, parameter):
         distribution = config.get(parameter, 'distribution')
@@ -476,7 +473,7 @@ class Simulation:
                              eventType['quantumExpired'], event.data)
         self.eventList.AddEvent(newEvent)
 
-    def InitRequestList(self, numberOfClients):
+    def InitRequestList(self, numberOfClients,clock):
         for i in range(numberOfClients):
-            newRequest=Request(requestState['thinking'],)
+            newRequest=Request(requestState['thinking'],clock.getTime(),i,)
             self.requestList.append(1)
