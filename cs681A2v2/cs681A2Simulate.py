@@ -34,9 +34,9 @@ class System:
 
     def __init__(self, serviceTimeDist, thinkTimeDist, timeoutDist, numProcs,
                  contextSwitchTime, timeQuantum, maxThreads, bufferSize):
-        self.serviceTime = serviceTimeDist
-        self.thinkTime = thinkTimeDist
-        self.timeout = timeoutDist
+        self.serviceTimeDist = serviceTimeDist
+        self.thinkTimeDist = thinkTimeDist
+        self.timeoutDist = timeoutDist
         self.numProcessors = numProcs
         self.contextSwitchTime = contextSwitchTime
         self.timeQuantum = timeQuantum
@@ -428,7 +428,7 @@ class Simulation:
         self.eventList = EventList()
 
         self.requestList=[]
-        self.InitRequestList(numberOfClients=self.numClients,self.system.clock)
+        self.InitRequestList(numberOfClients=self.numClients,clock=self.system.clock)
 
     def GetDistributionObject(self, config, parameter):
         distribution = config.get(parameter, 'distribution')
@@ -475,5 +475,5 @@ class Simulation:
 
     def InitRequestList(self, numberOfClients,clock):
         for i in range(numberOfClients):
-            newRequest=Request(requestState['thinking'],clock.getTime(),i,)
+            #newRequest=Request(requestState['thinking'],clock.getTime(),i,)
             self.requestList.append(1)
