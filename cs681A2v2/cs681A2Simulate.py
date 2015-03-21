@@ -9,11 +9,11 @@ import ConfigParser
 
 class Clock():
     def __init__(self,time=0):
-        self.time = time
+        self.__time = time
     def getTime(self):
-        return self.time
+        return self.__time
     def setTime(self,time):
-        self.time=time
+        self.__time=time
 
 class System:
     """
@@ -111,7 +111,7 @@ class Buffer:
 
     def QueueRequest(self, request):
         if len(self.requestQueue) is self.maxQueueSize:
-            raise Exception("Request Queue is full")
+            return -1
         else:
             self.requestQueue.append(request)
 
@@ -226,7 +226,7 @@ class Event:
                             - schedule Next
                             - timeout
         @timeStamp:     The time at which the event occurs
-        @data:          For an event of type Quantum Done, Schedule Next,
+        @data:          For an event of type Quantum Expired, Schedule Next,
                         and departure, this stores the processor Id on which
                         the event occurs. For an event of type Arrival, this
                         stores the request Id. For a timeout, this stores the
@@ -427,8 +427,23 @@ class Simulation:
 
         self.eventList = EventList()
 
-        self.requestList=[]
-        self.InitRequestList(numberOfClients=self.numClients,system=self.system)
+        self.requestList=[] #list of requests that are circulating in the system
+        self.InitRequestList()
+
+    def InitRequestList(self):
+        system=self.system
+
+        for i in range(self.numClients):
+            serviceTime=system.timeoutDist.sample()
+            timeOut=system.timeoutDist.sample()
+            timestamp=system.clock.getTime()
+            requestId=i
+            arrivalTime=system.thinkTimeDist.sample()
+
+            newRequest=Request(requestState['thinking'],timestamp,requestId,serviceTime,timeOut)
+            self.requestList.append(newRequest)
+
+            newEvent=Event(arrivalTime,eventType['arrival'],requestId) #schedule an arrival event
 
     def GetDistributionObject(self, config, parameter):
         distribution = config.get(parameter, 'distribution')
@@ -450,7 +465,9 @@ class Simulation:
                                                            'lambda_val'))
 
     def EventHandler(self, event):
-        pass
+        #update system clock
+        self.system.clock.setTime(event.timeStamp)
+        raise NotImplementedError
 
     # Add a scheduleNext event to the eventList, and update the processors
     # runqueue.
@@ -473,16 +490,50 @@ class Simulation:
                              eventType['quantumExpired'], event.data)
         self.eventList.AddEvent(newEvent)
 
-    def InitRequestList(self, numberOfClients,system):
-        for i in range(numberOfClients):
-            serviceTime=system.timeoutDist.sample()
-            timeOut=system.timeoutDist.sample()
-            timestamp=system.clock.getTime()
-            requestId=i
 
-            newRequest=Request(requestState['thinking'],timestamp,requestId,serviceTime,timeOut)
-            self.requestList.append(newRequest)
+    def HandleArrival(self,event):
+        reqId=event.data
+        request=filter(lambda x:True if x.reqId == reqId else False,self.requestList)
+        if len(request>1):
+            raise Exception('Duplicate request Ids in Simulation.requestList')
+        else:
+            request=request[0]
+
+        idleProcessor=-1
+        for i in self.system.processors:
+            if i.state==processorState['idle']:
+                idleProcessor=i.procId
+                break
 
 
-    def scheduleArrival(self,request,time):
+        if idleProcessor!=-1 :
+            if self.system.threadPool.AllocateThread(request.reqId,idleProcessor) == -1:#threadPool full
+                if self.system.reqBuffer.QueueRequest(request) == -1:#buffer full
+                    self.dropRequest(request)
+            else:#threadpool not full
+
+                if request.ServiceTime < self.system.timeQuantum:
+                    newEvent=Event(self.system.getTime()+request.serviceTime,eventType['departure'],idleProcessor)
+                else:
+                    newEvent=Event(self.system.clock.getTime()+self.system.timeQuantum,eventType['quantumExpired'],idleProcessor)
+                self.eventList.AddEvent(newEvent)
+        else:
+            #put request in runqueue of least busy processor
+            leastBusyProcessorSize=self.system.threadPool.maxNumThreads
+            leastBusyProcessor=-1
+
+            for i in self.system.processors:
+                if len(i.runQueue) <= leastBusyProcessorSize:
+                    leastBusyProcessor=i.procId
+                    leastBusyProcessorSize=len(i.runQueue)
+
+            if self.system.threadPool.AllocateThread(request.reqId,
+                                                     leastBusyProcessor) == -1 and self.system.reqBuffer.QueueRequest(
+                    request) == -1:
+            #threadPool full
+            #buffer full
+                self.dropRequest(request)
+
+
+    def dropRequest(self,request):
         raise NotImplementedError
