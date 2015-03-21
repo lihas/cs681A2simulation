@@ -123,6 +123,7 @@ class Buffer:
         return request
 
 
+
 class ThreadPool:
     """
         Represents the pool of threads available in the system
@@ -147,7 +148,12 @@ class ThreadPool:
 
     # To free a thread. Find the relevant entry in the thread list and
     # set it to (-1, -1)
-    def FreeThread(self, reqId, procId):
+    def FreeThread(self, request, processor):
+        assert isinstance(request,Request),'Expecting an object of class Request'
+        assert isinstance(processor,Processor),'Expecting an object of class processor'
+
+        reqId=request.reqId
+        procId=processor.procId
         if self.numBusyThreads is 0:
             raise Exception("No allocated threads in the system!")
         else:
@@ -155,11 +161,18 @@ class ThreadPool:
                 threadId = self.threadList.index((reqId, procId))
             except:
                 raise Exception("Thread with reqId and procId not found")
+            departingRequest=processor.RemoveRequest()
             self.threadList[threadId] = (-1, -1)
             self.numBusyThreads -= 1
+            return departingRequest
 
     # To allocate a thread. Find a free thread (-1, -1) and allocate it.
-    def AllocateThread(self, reqId, procId):
+    def AllocateThread(self, request, processor):
+        assert isinstance(request,Request),'Expecting an object of class Request'
+        assert isinstance(processor,Processor),'Expecting an object of class processor'
+
+        reqId=request.reqId
+        procId=processor.procId
         if self.numBusyThreads is self.maxNumThreads:
             return -1
         else:
@@ -167,6 +180,8 @@ class ThreadPool:
                 threadId = self.threadList.index((-1, -1))
             except:
                 raise Exception("Could not find a free thread in the system")
+
+            processor.AddRequest(request)
             self.threadList[threadId] = (reqId, procId)
             self.numBusyThreads += 1
             return threadId
@@ -194,20 +209,24 @@ class Processor:
         self.state = state
         self.runQueue = deque([])
 
-    def AddThread(self, thread):
-        self.runQueue.append(thread)
+    def getRunningRequest(self):
+        return self.runQueue[0]
 
-    def RemoveThread(self):
+    def AddRequest(self, request):
+        self.runQueue.append(request)
+
+    def RemoveRequest(self):
         try:
-            thread = self.runQueue.popleft()
+            request = self.runQueue.popleft()
         except IndexError:
             raise Exception("Processor's runqueue is empty!")
-        return thread
+        return request
 
     # Schedule the next job on the runqueue in a Round Robin fashion.
     def ScheduleNext(self):
-        thread = self.RemoveThread()
-        self.AddThread(thread)
+        prevRequest = self.RemoveRequest()
+        self.AddRequest(prevRequest)
+        return prevRequest
 
 
 eventType = {'arrival': 0, 'departure': 1, 'quantumExpired': 2,
@@ -253,6 +272,9 @@ class EventList:
         self.heap = []
         self.id = 0  # will give a unique id to each event
 
+    @property
+    def IsEmpty(self):
+        return len(self.heap)==0
 
     def AddEvent(self, event):
         """
@@ -260,16 +282,21 @@ class EventList:
         assign an id to it
         return the assigned id
         """
-        event.__id = id
-        id += 1
+        event.__id = self.id
+        self.id += 1
         self.AddToHeap(event)
         return event.__id
 
-    def RemoveEvent(self):
+    def PopEvent(self):
         """
         Remove and return next event with least timestamp
         """
-        raise NotImplementedError
+        return self.PopFromHeap()
+
+    def searchTimeoutEvent(self,requestId):
+        for i in self.heap:
+            if i.eventType==eventType['timeout'] and i.data==requestId:
+                return i
 
     # Heap specific methods:-
     def LeftChildIndex(self, node):
@@ -303,23 +330,23 @@ class EventList:
         s = self
 
         if self.Exists(self.RightChildIndex(node)) and self.Exists(self.LeftChildIndex(node)):
-            if self.heap[self.RightChildIndex(node)].timestamp < self.heap[node].timestamp:
-                s.swap(s.RightChildIndex(node), node)
+            if self.heap[self.RightChildIndex(node)].timeStamp < self.heap[node].timeStamp and self.heap[self.RightChildIndex(node)].timeStamp < self.heap[self.LeftChildIndex(node)].timeStamp:
+                s.Swap(s.RightChildIndex(node), node)
                 s.HeapifyAtposition(s.RightChildIndex(node))
                 return True
-            elif s.heap[s.LeftChildIndex(node)].timestamp < s.heap[node].timestamp:
-                s.swap(s.LeftChildIndex(node), node)
+            elif s.heap[s.LeftChildIndex(node)].timeStamp < s.heap[node].timeStamp and s.heap[s.LeftChildIndex(node)].timeStamp < s.heap[s.RightChildIndex(node)].timeStamp:
+                s.Swap(s.LeftChildIndex(node), node)
                 s.HeapifyAtposition(s.LeftChildIndex(node))
                 return True
             else:
                 return False
         elif s.Exists(s.RightChildIndex(node)):
-            if s.heap[s.RightChildIndex(node)].timestamp < s.heap[node].timestamp:
-                s.swap(s.RightChildIndex(node), node)
+            if s.heap[s.RightChildIndex(node)].timeStamp < s.heap[node].timeStamp:
+                s.Swap(s.RightChildIndex(node), node)
                 s.HeapifyAtposition(s.RightChildIndex(node))
                 return True
         elif s.Exists(s.LeftChildIndex(node)):
-            if s.heap[s.LeftChildIndex(node)].timestamp < s.heap[node].timestamp:
+            if s.heap[s.LeftChildIndex(node)].timeStamp < s.heap[node].timeStamp:
                 s.Swap(s.LeftChildIndex(node), node)
                 s.HeapifyAtposition(s.RightChildIndex(node))
                 return True
@@ -336,6 +363,17 @@ class EventList:
                 break
             else:
                 nodeIndex = s.ParentIndex(nodeIndex)
+    def PopFromHeap(s):
+        if len(s.heap)==1:
+            return s.heap.pop()
+        elif len(s.heap)==0:
+            return False
+        else:
+            lastElement=s.heap.pop()
+            heapRoot=s.heap[0]
+            s.heap[0]=lastElement
+            s.HeapifyAtposition(0)
+        return heapRoot
 
 
     def Heapify(self):
@@ -427,12 +465,14 @@ class Simulation:
 
         self.eventList = EventList()
 
+        self.requestIdList=[]
         self.requestList=[] #list of requests that are circulating in the system
         self.InitRequestList()
 
+
     def InitRequestList(self):
         system=self.system
-
+        currentTime=self.system.clock.getTime()
         for i in range(self.numClients):
             serviceTime=system.timeoutDist.sample()
             timeOut=system.timeoutDist.sample()
@@ -440,10 +480,8 @@ class Simulation:
             requestId=i
             arrivalTime=system.thinkTimeDist.sample()
 
-            newRequest=Request(requestState['thinking'],timestamp,requestId,serviceTime,timeOut)
-            self.requestList.append(newRequest)
-
-            newEvent=Event(arrivalTime,eventType['arrival'],requestId) #schedule an arrival event
+            self.createRequest(requestState['thinking'],timestamp,requestId,serviceTime,timeOut)
+            self.createEvent(currentTime+arrivalTime,eventType['arrival'],requestId) #schedule an arrival event
 
     def GetDistributionObject(self, config, parameter):
         distribution = config.get(parameter, 'distribution')
@@ -463,38 +501,76 @@ class Simulation:
             return Distribution(type=distType['exponential'],
                                 lambda_val=config.getfloat(parameter,
                                                            'lambda_val'))
+    def start(self):
+        return self.jarvis()
+
+    def jarvis(self):
+        eventsProcessed=0
+        while(not self.eventList.IsEmpty):
+            event=self.eventList.PopEvent()
+            self.EventHandler(event)
+            eventsProcessed += 1
+        return eventsProcessed
 
     def EventHandler(self, event):
         #update system clock
         self.system.clock.setTime(event.timeStamp)
-        raise NotImplementedError
+
+        if event.eventType==eventType['arrival']:
+            self.HandleArrival(event)
+        elif event.eventType==eventType['scheduleNext']:
+            self.HandleScheduleNext(event)
+        elif event.eventType==eventType['quantumExpired']:
+            self.HandleQuantumExpired(event)
+        elif event.eventType==eventType['timeout']:
+            self.HandleTimeout(event)
+        elif event.eventType==eventType['departure']:
+            self.HandleDeparture(event)
+        else:
+            raise Exception('Unknown event type')
+
 
     # Add a scheduleNext event to the eventList, and update the processors
-    # runqueue.
+    # runqueue, decrement remaining service time of request
     def HandleQuantumExpired(self, event):
-        newEvent = Event(event.timeStamp + self.system.contextSwitchTime,
+        quantum=self.system.timeQuantum
+        currentTime=self.system.clock.getTime()
+
+        self.createEvent(currentTime + self.system.contextSwitchTime,
                          eventType['scheduleNext'], event.data)
-        self.eventList.AddEvent(newEvent)
-        self.system.processors[event.data].ScheduleNext()
+
+        prevRequest=self.system.processors[event.data].ScheduleNext()
+        try:
+            prevRequest.UpdateRemainingServiceTime(quantum)
+        except:
+            pass
         self.system.processors[event.data].state = processorState['idle']
 
     # Add a departure or a quantum expired event based on the remaining
     # service time of the event at the head of the processors run queue.
     def HandleScheduleNext(self, event):
-        remTime = self.system.processors[event.data].runQueue[0].remServiceTime
+        processor=self.system.processors[event.data]
+        remTime = processor.runQueue[0].remServiceTime
+        currenTime=self.system.clock.getTime()
+
         if remTime < self.system.timeQuantum:
-            newEvent = Event(event.timeStamp + remTime, eventType['departure'],
+            self.createEvent(currenTime + remTime, eventType['departure'],
                              event.data)
         else:
-            newEvent = Event(event.timeStamp + self.system.timeQuantum,
+            self.createEvent(currenTime + self.system.timeQuantum,
                              eventType['quantumExpired'], event.data)
-        self.eventList.AddEvent(newEvent)
+        processor.state=processorState['idle']
+
 
 
     def HandleArrival(self,event):
+        print('arrival')
+        requestDropped=0 #status flag
         reqId=event.data
-        request=filter(lambda x:True if x.reqId == reqId else False,self.requestList)
-        if len(request>1):
+        currentTime=self.system.clock.getTime()
+        request=filter(lambda x:x.reqId==reqId,self.requestList)
+
+        if len(request)>1:
             raise Exception('Duplicate request Ids in Simulation.requestList')
         else:
             request=request[0]
@@ -502,21 +578,21 @@ class Simulation:
         idleProcessor=-1
         for i in self.system.processors:
             if i.state==processorState['idle']:
-                idleProcessor=i.procId
+                idleProcessor=i
                 break
 
 
         if idleProcessor!=-1 :
-            if self.system.threadPool.AllocateThread(request.reqId,idleProcessor) == -1:#threadPool full
+            if self.system.threadPool.AllocateThread(request,idleProcessor) == -1:#threadPool full
                 if self.system.reqBuffer.QueueRequest(request) == -1:#buffer full
                     self.dropRequest(request)
+                    requestDropped=1
             else:#threadpool not full
 
-                if request.ServiceTime < self.system.timeQuantum:
-                    newEvent=Event(self.system.getTime()+request.serviceTime,eventType['departure'],idleProcessor)
+                if request.serviceTime < self.system.timeQuantum:
+                    self.createEvent(currentTime+request.serviceTime,eventType['departure'],idleProcessor.procId)
                 else:
-                    newEvent=Event(self.system.clock.getTime()+self.system.timeQuantum,eventType['quantumExpired'],idleProcessor)
-                self.eventList.AddEvent(newEvent)
+                    self.createEvent(currentTime+self.system.timeQuantum,eventType['quantumExpired'],idleProcessor.procId)
         else:
             #put request in runqueue of least busy processor
             leastBusyProcessorSize=self.system.threadPool.maxNumThreads
@@ -524,16 +600,123 @@ class Simulation:
 
             for i in self.system.processors:
                 if len(i.runQueue) <= leastBusyProcessorSize:
-                    leastBusyProcessor=i.procId
+                    leastBusyProcessor=i
                     leastBusyProcessorSize=len(i.runQueue)
 
-            if self.system.threadPool.AllocateThread(request.reqId,
+            if self.system.threadPool.AllocateThread(request,
                                                      leastBusyProcessor) == -1 and self.system.reqBuffer.QueueRequest(
                     request) == -1:
             #threadPool full
             #buffer full
                 self.dropRequest(request)
+                requestDropped=1
+        if requestDropped == 0:
+            #if request was not dropped, schedule a timeout event for it
+            self.createEvent(currentTime+request.timeout,eventType['timeout'],request.reqId)
+
+    def HandleDeparture(self,event):
+        #free thread
+        #create a new thread set thread's state to thinking
+        #cancel request's timeout event
+        #handle case where there are multiple timeout events of a request (when request already recirculates) -- all except one should have their cancel bit set, else raise an error
+        #handle timed out request
+
+        currentTime=self.system.clock.getTime()
+        uniqueId=self.getUniqueRequestId()
+        serviceTime=self.system.serviceTimeDist.sample()
+        timeOut=self.system.timeoutDist.sample()
+        arrivalTime=self.system.thinkTimeDist.sample()
+        timeStamp=currentTime
+
+        self.createRequest(requestState['thinking'],currentTime,uniqueId,serviceTime,timeOut)
+        self.createEvent(currentTime+arrivalTime,eventType['arrival'],uniqueId)
+
+        #free thread
+
+        procId=event.data
+        processor=self.system.processors[procId]
+        request=processor.getRunningRequest()
+
+        self.system.threadPool.FreeThread(request,processor)
+        self.requestList.remove(request)
+        self.requestIdList.remove(request.reqId)
+
+
+
+        if request.timeout > currentTime:
+            #request hasn't timed out
+            event=self.eventList.searchTimeoutEvent(request.reqId)
+            event.cancelled=1
+
+
+    def HandleTimeout(self,event):
+        #create new request in thinking state
+        if event.cancelled==1: #this timeout event was cancelled since event departed before timeout
+            return
+
+        currentTime=self.system.clock.getTime()
+
+        request=filter(lambda x:x.reqId == event.data,self.requestList)
+
+        if len(request)>1:
+            raise Exception('Duplicate request Ids in Simulation.requestList')
+        else:
+            request = request[0]
+
+        #create new request
+        uniqueId=self.getUniqueRequestId()
+        serviceTime=self.system.serviceTimeDist.sample()
+        timeOut=self.system.timeoutDist.sample()
+        arrivalTime=self.system.thinkTimeDist.sample()
+        timeStamp=currentTime
+
+        self.createRequest(requestState['thinking'],currentTime,uniqueId,serviceTime,timeOut)
+        self.createEvent(currentTime+arrivalTime,eventType['arrival'],uniqueId)
+
+
 
 
     def dropRequest(self,request):
-        raise NotImplementedError
+            #create new request at client
+            #remove event from request queue
+            #called when threadpool and buffer are full
+
+
+        #create new request
+        currentTime=self.system.clock.getTime()
+        uniqueId=self.getUniqueRequestId()
+        serviceTime=self.system.serviceTimeDist.sample()
+        timeOut=self.system.timeoutDist.sample()
+        arrivalTime=self.system.thinkTimeDist.sample()
+        timeStamp=currentTime
+
+        self.createRequest(requestState['thinking'],currentTime,uniqueId,serviceTime,timeOut)
+        self.createEvent(currentTime+arrivalTime,eventType['arrival'],uniqueId)
+
+        #drop older request
+        self.requestIdList.remove(request.reqId)
+        self.requestList.remove(request)
+
+
+
+    def getUniqueRequestId(self):
+        for i in range(len(self.requestIdList)+1):
+            if i not in self.requestIdList:
+                return i;
+
+    def createRequest(self, requestState, currentTime, uniqueId, serviceTime, timeOut):
+        if uniqueId in self.requestIdList:
+            raise Exception('Id already Exists')
+
+        newRequest=Request(requestState,currentTime,uniqueId,serviceTime,timeOut)
+        self.requestList.append(newRequest)
+        self.requestIdList.append(uniqueId)
+        return newRequest
+
+    def createEvent(self, timeStamp, eventType, data):
+        newEvent=Event(timeStamp,eventType,data)
+        self.eventList.AddEvent(newEvent)
+        return newEvent
+
+
+print Simulation().start()
