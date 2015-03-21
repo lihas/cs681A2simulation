@@ -92,7 +92,7 @@ class Request:
         self.remServiceTime = serviceTime
         self.timeout = timeout
 
-    def UpdateServiceTime(self, updateTime):
+    def UpdateRemainingServiceTime(self, updateTime):
         if self.remServiceTime - updateTime < 0:
             raise Exception("Update makes remaining service time negative!")
         else:
@@ -428,7 +428,7 @@ class Simulation:
         self.eventList = EventList()
 
         self.requestList=[]
-        self.InitRequestList(numberOfClients=self.numClients,clock=self.system.clock)
+        self.InitRequestList(numberOfClients=self.numClients,system=self.system)
 
     def GetDistributionObject(self, config, parameter):
         distribution = config.get(parameter, 'distribution')
@@ -473,7 +473,16 @@ class Simulation:
                              eventType['quantumExpired'], event.data)
         self.eventList.AddEvent(newEvent)
 
-    def InitRequestList(self, numberOfClients,clock):
+    def InitRequestList(self, numberOfClients,system):
         for i in range(numberOfClients):
-            #newRequest=Request(requestState['thinking'],clock.getTime(),i,)
-            self.requestList.append(1)
+            serviceTime=system.timeoutDist.sample()
+            timeOut=system.timeoutDist.sample()
+            timestamp=system.clock.getTime()
+            requestId=i
+
+            newRequest=Request(requestState['thinking'],timestamp,requestId,serviceTime,timeOut)
+            self.requestList.append(newRequest)
+
+
+    def scheduleArrival(self,request,time):
+        raise NotImplementedError
