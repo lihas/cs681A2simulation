@@ -6,6 +6,7 @@ from collections import deque
 import math
 import ConfigParser
 
+printMetrics = True
 
 class Clock():
     def __init__(self,time=0):
@@ -122,6 +123,9 @@ class Buffer:
             raise Exception("Request Buffer is empty!")
         return request
 
+    def isEmpty(self):
+        return len(self.requestQueue) == 0
+
 
 
 class ThreadPool:
@@ -173,7 +177,7 @@ class ThreadPool:
 
         reqId=request.reqId
         procId=processor.procId
-        if self.numBusyThreads is self.maxNumThreads:
+        if self.numBusyThreads == self.maxNumThreads:
             return -1
         else:
             try:
@@ -187,7 +191,7 @@ class ThreadPool:
             return threadId
 
 
-processorState = {'idle': 0, 'busy': 1}
+processorState = {'idle': 0, 'busy': 1,'contextSwitch':2}
 
 
 class Processor:
@@ -211,6 +215,9 @@ class Processor:
 
     def getRunningRequest(self):
         return self.runQueue[0]
+
+    def runQueueEmpty(self):
+        return len(self.runQueue)==0
 
     def AddRequest(self, request):
         self.runQueue.append(request)
@@ -282,10 +289,19 @@ class EventList:
         assign an id to it
         return the assigned id
         """
+        assert isinstance(event,Event),'event object not of event type'
+
         event.__id = self.id
         self.id += 1
         self.AddToHeap(event)
         return event.__id
+
+    def RemoveEvent(self, eventType, requestId):
+        for i in range(len(self.heap)):
+            if self.heap[i].eventType == eventType and self.heap[i].data == requestId:
+                del self.heap[i]
+                break
+        self.Heapify()
 
     def PopEvent(self):
         """
@@ -330,11 +346,11 @@ class EventList:
         s = self
 
         if self.Exists(self.RightChildIndex(node)) and self.Exists(self.LeftChildIndex(node)):
-            if self.heap[self.RightChildIndex(node)].timeStamp < self.heap[node].timeStamp and self.heap[self.RightChildIndex(node)].timeStamp < self.heap[self.LeftChildIndex(node)].timeStamp:
+            if self.heap[self.RightChildIndex(node)].timeStamp <= self.heap[node].timeStamp and self.heap[self.RightChildIndex(node)].timeStamp <= self.heap[self.LeftChildIndex(node)].timeStamp:
                 s.Swap(s.RightChildIndex(node), node)
                 s.HeapifyAtposition(s.RightChildIndex(node))
                 return True
-            elif s.heap[s.LeftChildIndex(node)].timeStamp < s.heap[node].timeStamp and s.heap[s.LeftChildIndex(node)].timeStamp < s.heap[s.RightChildIndex(node)].timeStamp:
+            elif s.heap[s.LeftChildIndex(node)].timeStamp <= s.heap[node].timeStamp and s.heap[s.LeftChildIndex(node)].timeStamp <= s.heap[s.RightChildIndex(node)].timeStamp:
                 s.Swap(s.LeftChildIndex(node), node)
                 s.HeapifyAtposition(s.LeftChildIndex(node))
                 return True
@@ -445,23 +461,28 @@ class Distribution:
 
 
 class Simulation:
+
     def __init__(self):
-        config = ConfigParser.ConfigParser()
-        config.read('simulation.cfg')
 
-        self.randomSeed = config.getint('System', 'randomSeed')
-        self.numClients=config.getint('Simulation', 'numClients')
+        self.idCtr=1000 #TODO: this is being used by self.getUniqueRequestId(), remove this when that function changes
 
-        serviceTimeDist = self.GetDistributionObject(config, 'ServiceTime')
-        thinkTimeDist = self.GetDistributionObject(config, 'ThinkTime')
-        timeoutDist = self.GetDistributionObject(config, 'Timeout')
 
-        self.system = System(serviceTimeDist, thinkTimeDist, timeoutDist,
-                             config.getint('System', 'numProcessors'),
-                             config.getfloat('Processor', 'contextSwitchTime'),
-                             config.getfloat('Processor', 'timeQuantum'),
-                             config.getint('System', 'maxThreads'),
-                             config.getint('System', 'bufferSize'))
+        self.config = ConfigParser.ConfigParser()
+        self.config.read('simulation.cfg')
+
+        self.randomSeed = self.config.getint('System', 'randomSeed')
+        self.numClients=self.config.getint('Simulation', 'numClients')
+
+        self.serviceTimeDist = self.GetDistributionObject(self.config, 'ServiceTime')
+        self.thinkTimeDist = self.GetDistributionObject(self.config, 'ThinkTime')
+        self.timeoutDist = self.GetDistributionObject(self.config, 'Timeout')
+
+        self.system = System(self.serviceTimeDist, self.thinkTimeDist, self.timeoutDist,
+                             self.config.getint('System', 'numProcessors'),
+                             self.config.getfloat('Processor', 'contextSwitchTime'),
+                             self.config.getfloat('Processor', 'timeQuantum'),
+                             self.config.getint('System', 'maxThreads'),
+                             self.config.getint('System', 'bufferSize'))
 
         self.eventList = EventList()
 
@@ -474,13 +495,13 @@ class Simulation:
         system=self.system
         currentTime=self.system.clock.getTime()
         for i in range(self.numClients):
-            serviceTime=system.timeoutDist.sample()
+            serviceTime=system.serviceTimeDist.sample()
             timeOut=system.timeoutDist.sample()
-            timestamp=system.clock.getTime()
+            timestamp=currentTime
             requestId=i
             arrivalTime=system.thinkTimeDist.sample()
 
-            self.createRequest(requestState['thinking'],timestamp,requestId,serviceTime,timeOut)
+            self.createRequest(requestState['thinking'],timestamp+arrivalTime,requestId,serviceTime,timeOut)
             self.createEvent(currentTime+arrivalTime,eventType['arrival'],requestId) #schedule an arrival event
 
     def GetDistributionObject(self, config, parameter):
@@ -506,7 +527,8 @@ class Simulation:
 
     def jarvis(self):
         eventsProcessed=0
-        while(not self.eventList.IsEmpty):
+        #while(not self.eventList.IsEmpty):
+        while(eventsProcessed<10000):
             event=self.eventList.PopEvent()
             self.EventHandler(event)
             eventsProcessed += 1
@@ -533,6 +555,9 @@ class Simulation:
     # Add a scheduleNext event to the eventList, and update the processors
     # runqueue, decrement remaining service time of request
     def HandleQuantumExpired(self, event):
+        if printMetrics:
+            print '['+str(event.timeStamp)+']'+" Quantum Expired on Processor " + str(event.data)
+
         quantum=self.system.timeQuantum
         currentTime=self.system.clock.getTime()
 
@@ -544,13 +569,28 @@ class Simulation:
             prevRequest.UpdateRemainingServiceTime(quantum)
         except:
             pass
-        self.system.processors[event.data].state = processorState['idle']
+        self.system.processors[event.data].state = processorState['contextSwitch']
 
     # Add a departure or a quantum expired event based on the remaining
     # service time of the event at the head of the processors run queue.
     def HandleScheduleNext(self, event):
+        if printMetrics:
+            print '['+str(event.timeStamp)+']'+" Schedule Next on Processor " + str(event.data)
+
+        #debug
+        if event.data >100:
+            pass
+
         processor=self.system.processors[event.data]
+
+        if len(processor.runQueue)<=0:
+            raise Exception('runQueue Empty for procId . This wasn\'t expected. A scheduleNext automatically implies a non-empty run-queue'+str(processor.procId))
+
         remTime = processor.runQueue[0].remServiceTime
+
+        request=processor.runQueue[0]
+        #print remTime,processor.runQueue[0].serviceTime,request.reqId,processor.procId
+
         currenTime=self.system.clock.getTime()
 
         if remTime < self.system.timeQuantum:
@@ -559,15 +599,18 @@ class Simulation:
         else:
             self.createEvent(currenTime + self.system.timeQuantum,
                              eventType['quantumExpired'], event.data)
-        processor.state=processorState['idle']
+        processor.state=processorState['busy']
 
 
 
     def HandleArrival(self,event):
-        print('arrival')
+        if printMetrics:
+            print '['+str(event.timeStamp)+']'+" Arrival of Request " + str(event.data)
+
         requestDropped=0 #status flag
         reqId=event.data
         currentTime=self.system.clock.getTime()
+
         request=filter(lambda x:x.reqId==reqId,self.requestList)
 
         if len(request)>1:
@@ -583,6 +626,7 @@ class Simulation:
 
 
         if idleProcessor!=-1 :
+            #idle processor was found, set it's state to busy, if threadpool not full
             if self.system.threadPool.AllocateThread(request,idleProcessor) == -1:#threadPool full
                 if self.system.reqBuffer.QueueRequest(request) == -1:#buffer full
                     self.dropRequest(request)
@@ -593,10 +637,11 @@ class Simulation:
                     self.createEvent(currentTime+request.serviceTime,eventType['departure'],idleProcessor.procId)
                 else:
                     self.createEvent(currentTime+self.system.timeQuantum,eventType['quantumExpired'],idleProcessor.procId)
+                self.system.processors[idleProcessor.procId].state=processorState['busy']
         else:
             #put request in runqueue of least busy processor
             leastBusyProcessorSize=self.system.threadPool.maxNumThreads
-            leastBusyProcessor=-1
+            leastBusyProcessor=None
 
             for i in self.system.processors:
                 if len(i.runQueue) <= leastBusyProcessorSize:
@@ -612,7 +657,7 @@ class Simulation:
                 requestDropped=1
         if requestDropped == 0:
             #if request was not dropped, schedule a timeout event for it
-            self.createEvent(currentTime+request.timeout,eventType['timeout'],request.reqId)
+            self.createEvent(request.timeStamp+request.timeout,eventType['timeout'],request.reqId)
 
     def HandleDeparture(self,event):
         #free thread
@@ -620,48 +665,83 @@ class Simulation:
         #cancel request's timeout event
         #handle case where there are multiple timeout events of a request (when request already recirculates) -- all except one should have their cancel bit set, else raise an error
         #handle timed out request
-
-        currentTime=self.system.clock.getTime()
-        uniqueId=self.getUniqueRequestId()
-        serviceTime=self.system.serviceTimeDist.sample()
-        timeOut=self.system.timeoutDist.sample()
-        arrivalTime=self.system.thinkTimeDist.sample()
-        timeStamp=currentTime
-
-        self.createRequest(requestState['thinking'],currentTime,uniqueId,serviceTime,timeOut)
-        self.createEvent(currentTime+arrivalTime,eventType['arrival'],uniqueId)
-
-        #free thread
+        # If request Buffer is not empty, pick the next request fomr there.
+        #set processor state to idle or contextSwitch
+        if printMetrics:
+            print '['+str(event.timeStamp)+']'+" Departure of Request " + str(self.system.processors[event.data].getRunningRequest().reqId)
 
         procId=event.data
         processor=self.system.processors[procId]
         request=processor.getRunningRequest()
+        currentTime=self.system.clock.getTime()
+
+        if request.timeout + request.timeStamp > currentTime:
+            timedOut = False
+
+        else:
+            timedOut = True
+
+        if not timedOut:
+            uniqueId=self.getUniqueRequestId()
+            serviceTime=self.system.serviceTimeDist.sample()
+            timeOut=self.system.timeoutDist.sample()
+            arrivalTime=self.system.thinkTimeDist.sample()
+            timeStamp=currentTime
+            self.createRequest(requestState['thinking'],currentTime+arrivalTime,uniqueId,serviceTime,timeOut)
+            self.createEvent(currentTime+arrivalTime,eventType['arrival'],uniqueId)
+
+        if not timedOut:
+            if not self.system.reqBuffer.isEmpty():
+                nextRequest = self.system.reqBuffer.DequeueRequest()
+                self.createEvent(currentTime,eventType['arrival'],nextRequest.reqId) # HACK
+
+
+        #free thread
+
 
         self.system.threadPool.FreeThread(request,processor)
         self.requestList.remove(request)
         self.requestIdList.remove(request.reqId)
 
 
-
-        if request.timeout > currentTime:
+        if not timedOut:
             #request hasn't timed out
-            event=self.eventList.searchTimeoutEvent(request.reqId)
-            event.cancelled=1
+            #event=self.eventList.searchTimeoutEvent(request.reqId)
+            self.eventList.searchTimeoutEvent(request.reqId).cancelled=1
+            self.eventList.RemoveEvent(eventType['timeout'], request.reqId)
+
+        #set processor state, create schedule next event
+
+        if processor.runQueueEmpty():
+            processor.state=processorState['idle']
+        else:
+            processor.state=processorState['contextSwitch']
+            self.createEvent(currentTime+self.system.contextSwitchTime,eventType['scheduleNext'],processor.procId)
+
 
 
     def HandleTimeout(self,event):
+
+
         #create new request in thinking state
         if event.cancelled==1: #this timeout event was cancelled since event departed before timeout
+            print '['+str(event.timeStamp)+']'+" Timeout(Cancelled) of Request " + str(event.data)
             return
 
         currentTime=self.system.clock.getTime()
+
+        if printMetrics:
+            print '['+str(event.timeStamp)+']'+" Timeout of Request " + str(event.data)
 
         request=filter(lambda x:x.reqId == event.data,self.requestList)
 
         if len(request)>1:
             raise Exception('Duplicate request Ids in Simulation.requestList')
         else:
-            request = request[0]
+            try:
+                request = request[0]
+            except:
+                pass
 
         #create new request
         uniqueId=self.getUniqueRequestId()
@@ -670,7 +750,7 @@ class Simulation:
         arrivalTime=self.system.thinkTimeDist.sample()
         timeStamp=currentTime
 
-        self.createRequest(requestState['thinking'],currentTime,uniqueId,serviceTime,timeOut)
+        self.createRequest(requestState['thinking'],currentTime+arrivalTime,uniqueId,serviceTime,timeOut)
         self.createEvent(currentTime+arrivalTime,eventType['arrival'],uniqueId)
 
 
@@ -684,13 +764,14 @@ class Simulation:
 
         #create new request
         currentTime=self.system.clock.getTime()
+
         uniqueId=self.getUniqueRequestId()
         serviceTime=self.system.serviceTimeDist.sample()
         timeOut=self.system.timeoutDist.sample()
         arrivalTime=self.system.thinkTimeDist.sample()
         timeStamp=currentTime
 
-        self.createRequest(requestState['thinking'],currentTime,uniqueId,serviceTime,timeOut)
+        self.createRequest(requestState['thinking'],currentTime+arrivalTime,uniqueId,serviceTime,timeOut)
         self.createEvent(currentTime+arrivalTime,eventType['arrival'],uniqueId)
 
         #drop older request
@@ -700,20 +781,25 @@ class Simulation:
 
 
     def getUniqueRequestId(self):
+        #TODO: write a better algo, take care of wrap around
+        self.idCtr += 1
+        return self.idCtr
         for i in range(len(self.requestIdList)+1):
             if i not in self.requestIdList:
                 return i;
 
-    def createRequest(self, requestState, currentTime, uniqueId, serviceTime, timeOut):
+    def createRequest(self, requestState, timeStamp, uniqueId, serviceTime, timeOut):
         if uniqueId in self.requestIdList:
             raise Exception('Id already Exists')
 
-        newRequest=Request(requestState,currentTime,uniqueId,serviceTime,timeOut)
+        newRequest=Request(requestState,timeStamp,uniqueId,serviceTime,timeOut)
         self.requestList.append(newRequest)
         self.requestIdList.append(uniqueId)
         return newRequest
 
     def createEvent(self, timeStamp, eventType, data):
+        if data is None:
+            raise Exception("Event Data is None!")
         newEvent=Event(timeStamp,eventType,data)
         self.eventList.AddEvent(newEvent)
         return newEvent
