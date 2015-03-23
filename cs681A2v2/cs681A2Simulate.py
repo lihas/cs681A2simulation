@@ -177,7 +177,7 @@ class ThreadPool:
 
         reqId=request.reqId
         procId=processor.procId
-        if self.numBusyThreads == self.maxNumThreads:
+        if self.numBusyThreads == self.maxNumThreads: #earlier this was raising an error when instead of '==' we had put 'is' in this line
             return -1
         else:
             try:
