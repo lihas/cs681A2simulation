@@ -257,17 +257,18 @@ class Event:
                         the event occurs. For an event of type Arrival, this
                         stores the request Id. For a timeout, this stores the
                         request Id.
-        @cancelled      0:Event not cancelled
-                        1:Event was cancelled, and hence not needed to be handled
-                        This member is used to handle the removal of timeout event from event list, if timeout doesn't occur when an event departs
+        @cancelled
+                        Interpret this differently in the context of different event handlers.
+                        Arrival: if cancelled==1, do not create a timeout event for the request, as it is a request which was picked from buffer in HandleDeparture and not a new request from client. To handle the hackish way we are scheduling an event picket from reqBuffer in HandleDeparture, where we just schedule it's arrival at the current time. without this part of code , there were multiple timeoutEvents that ere being created for the same event if the event were moved to buffer in HandleArrival on not finding a free thread.
+                        Timeout: if cancelled==1, do no execute the timeout event, as the request has already departed
     """
 
-    def __init__(self, timeStamp, eventType, data):
+    def __init__(self, timeStamp, eventType, data,cancelled=0): #cancelled=0 was added to handle the hackish way we are scheduling an event picket from reqBuffer in HandleDeparture, where we just schedule it's arrival at the current time. without this part of code it there were multiple timeoutEvents that ere being created for the same event if the event were moved to buffer in HandleArrival on not finding a free thread.
         self.__id = None
         self.timeStamp = timeStamp
         self.eventType = eventType
         self.data = data
-        self.cancelled = 0
+        self.cancelled = cancelled
 
 
 class EventList:
@@ -608,6 +609,7 @@ class Simulation:
             print '['+str(event.timeStamp)+']'+" Arrival of Request " + str(event.data)
 
         requestDropped=0 #status flag
+        requestInBuffer=False #status flag
         reqId=event.data
         currentTime=self.system.clock.getTime()
 
@@ -631,6 +633,8 @@ class Simulation:
                 if self.system.reqBuffer.QueueRequest(request) == -1:#buffer full
                     self.dropRequest(request)
                     requestDropped=1
+                else:
+                    requestInBuffer=True
             else:#threadpool not full
 
                 if request.serviceTime < self.system.timeQuantum:
@@ -649,13 +653,17 @@ class Simulation:
                     leastBusyProcessorSize=len(i.runQueue)
 
             if self.system.threadPool.AllocateThread(request,
-                                                     leastBusyProcessor) == -1 and self.system.reqBuffer.QueueRequest(
-                    request) == -1:
-            #threadPool full
-            #buffer full
-                self.dropRequest(request)
-                requestDropped=1
-        if requestDropped == 0:
+                                                     leastBusyProcessor) == -1:
+                if self.system.reqBuffer.QueueRequest(
+                        request) == -1:
+                #threadPool full
+                #buffer full
+                    self.dropRequest(request)
+                    requestDropped=1
+                else:
+                    requestInBuffer=True
+
+        if requestDropped == 0 and not event.cancelled : #and not event.cancelled was added to handle the hackish way we are scheduling an event picket from reqBuffer in HandleDeparture, where we just schedule it's arrival at the current time. without this part of code it there were multiple timeoutEvents that ere being created for the same event if the event were moved to buffer in HandleArrival on not finding a free thread.
             #if request was not dropped, schedule a timeout event for it
             self.createEvent(request.timeStamp+request.timeout,eventType['timeout'],request.reqId)
 
@@ -693,7 +701,7 @@ class Simulation:
         if not timedOut:
             if not self.system.reqBuffer.isEmpty():
                 nextRequest = self.system.reqBuffer.DequeueRequest()
-                self.createEvent(currentTime,eventType['arrival'],nextRequest.reqId) # HACK
+                self.createEvent(currentTime,eventType['arrival'],nextRequest.reqId,1) # HACK
 
 
         #free thread
@@ -797,10 +805,12 @@ class Simulation:
         self.requestIdList.append(uniqueId)
         return newRequest
 
-    def createEvent(self, timeStamp, eventType, data):
+    def createEvent(self, timeStamp, eventType, data,cancelled=0):
+        #cancelled=0 was added to handle the hackish way we are scheduling an event picket from reqBuffer in HandleDeparture, where we just schedule it's arrival at the current time. without this part of code it there were multiple timeoutEvents that ere being created for the same event if the event were moved to buffer in HandleArrival on not finding a free thread.
+
         if data is None:
             raise Exception("Event Data is None!")
-        newEvent=Event(timeStamp,eventType,data)
+        newEvent=Event(timeStamp,eventType,data,cancelled)
         self.eventList.AddEvent(newEvent)
         return newEvent
 
