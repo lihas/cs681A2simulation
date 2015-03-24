@@ -11,6 +11,9 @@ printMetrics = True
 #debug To calculate the average response time
 totRespTime = 0
 
+#debug gui
+g=None
+
 class Clock():
     def __init__(self,time=0):
         self.__time = time
@@ -835,6 +838,72 @@ class Simulation:
         return newEvent
 
 
+
+
+class graphics:
+    def __init__(self,graphicsOn=True):
+
+        self.__graphicsOn=graphicsOn
+        try:
+            import pygame
+            self.pygame=pygame
+        except:
+            self.__graphicsOn=False
+        else:
+            pygame.init()
+            self.__font=pygame.font.SysFont('arial',15)
+            self.__screen=pygame.display.set_mode((640,480),0,32)
+            pygame.display.set_caption('cs681 simulator')
+            self.WHITE=(255,255,255)
+            self.BLACK=(0,0,0)
+            self.RED=(255,0,0)
+            self.GREEN=(0,255,0)
+            self.BLUE=(0,0,255)
+            self.__screen.fill(self.WHITE)
+            pygame.display.update()
+
+    def wrapper(function):
+        from functools import wraps
+        @wraps(function)
+        def fun(self,*a,**b):
+            if self.__graphicsOn:
+                function(self,*a,**b)
+                self.pygame.display.update()
+            else:
+                pass
+        return fun
+
+    @wrapper
+    def createProcessors(self):
+        for i in range(4):
+            xcord=80+i*160
+            ycord=80
+
+            text=self.__font.render('P'+str(i),True,self.BLACK,self.WHITE)
+            self.__screen.blit(text,(xcord-60,ycord-70))
+            self.pygame.draw.circle(self.__screen,self.BLACK,(xcord,ycord),60,1)
+
+    @wrapper
+    def updateProcessorState(self,pId,state,queue):
+        centre=(80+160*pId)
+        self.pygame.draw.circle(self.__screen,self.WHITE,centre,58,0) #clear inside of processor's circle
+        self.__font.render(state,True,self.BLACK,self.WHITE)
+
+        for i in range(min(10,len(queue))):
+            self.pygame.draw.rect(self.__screen,self.BLACK,(centre[0],centre[1]+80+i*31,160,30),1)
+
+
+
+
+
+
+
+
+
+
+g.createProcessors()
+g=graphics()
+
 sim=Simulation()
 departures=sim.start()
 throughput=departures/sim.currentTime
@@ -842,3 +911,9 @@ avgRespTime = totRespTime/departures
 
 print "throughput",throughput
 print "average Response time", avgRespTime
+
+
+
+
+while True:
+    pass

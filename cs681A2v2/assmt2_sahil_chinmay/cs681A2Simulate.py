@@ -8,9 +8,6 @@ import ConfigParser
 
 printMetrics = True
 
-#debug To calculate the average response time
-totRespTime = 0
-
 class Clock():
     def __init__(self,time=0):
         self.__time = time
@@ -180,7 +177,7 @@ class ThreadPool:
 
         reqId=request.reqId
         procId=processor.procId
-        if self.numBusyThreads == self.maxNumThreads: #earlier this was raising an error when instead of '==' we had put 'is' in this line
+        if self.numBusyThreads == self.maxNumThreads:
             return -1
         else:
             try:
@@ -260,18 +257,17 @@ class Event:
                         the event occurs. For an event of type Arrival, this
                         stores the request Id. For a timeout, this stores the
                         request Id.
-        @cancelled
-                        Interpret this differently in the context of different event handlers.
-                        Arrival: if cancelled==1, do not create a timeout event for the request, as it is a request which was picked from buffer in HandleDeparture and not a new request from client. To handle the hackish way we are scheduling an event picket from reqBuffer in HandleDeparture, where we just schedule it's arrival at the current time. without this part of code , there were multiple timeoutEvents that ere being created for the same event if the event were moved to buffer in HandleArrival on not finding a free thread.
-                        Timeout: if cancelled==1, do no execute the timeout event, as the request has already departed
+        @cancelled      0:Event not cancelled
+                        1:Event was cancelled, and hence not needed to be handled
+                        This member is used to handle the removal of timeout event from event list, if timeout doesn't occur when an event departs
     """
 
-    def __init__(self, timeStamp, eventType, data,cancelled=0): #cancelled=0 was added to handle the hackish way we are scheduling an event picket from reqBuffer in HandleDeparture, where we just schedule it's arrival at the current time. without this part of code it there were multiple timeoutEvents that ere being created for the same event if the event were moved to buffer in HandleArrival on not finding a free thread.
+    def __init__(self, timeStamp, eventType, data):
         self.__id = None
         self.timeStamp = timeStamp
         self.eventType = eventType
         self.data = data
-        self.cancelled = cancelled
+        self.cancelled = 0
 
 
 class EventList:
@@ -294,7 +290,6 @@ class EventList:
         return the assigned id
         """
         assert isinstance(event,Event),'event object not of event type'
-
         event.__id = self.id
         self.id += 1
         self.AddToHeap(event)
@@ -304,7 +299,6 @@ class EventList:
         for i in range(len(self.heap)):
             if self.heap[i].eventType == eventType and self.heap[i].data == requestId:
                 del self.heap[i]
-                break
         self.Heapify()
 
     def PopEvent(self):
@@ -350,11 +344,11 @@ class EventList:
         s = self
 
         if self.Exists(self.RightChildIndex(node)) and self.Exists(self.LeftChildIndex(node)):
-            if self.heap[self.RightChildIndex(node)].timeStamp <= self.heap[node].timeStamp and self.heap[self.RightChildIndex(node)].timeStamp <= self.heap[self.LeftChildIndex(node)].timeStamp:
+            if self.heap[self.RightChildIndex(node)].timeStamp < self.heap[node].timeStamp and self.heap[self.RightChildIndex(node)].timeStamp < self.heap[self.LeftChildIndex(node)].timeStamp:
                 s.Swap(s.RightChildIndex(node), node)
                 s.HeapifyAtposition(s.RightChildIndex(node))
                 return True
-            elif s.heap[s.LeftChildIndex(node)].timeStamp <= s.heap[node].timeStamp and s.heap[s.LeftChildIndex(node)].timeStamp <= s.heap[s.RightChildIndex(node)].timeStamp:
+            elif s.heap[s.LeftChildIndex(node)].timeStamp < s.heap[node].timeStamp and s.heap[s.LeftChildIndex(node)].timeStamp < s.heap[s.RightChildIndex(node)].timeStamp:
                 s.Swap(s.LeftChildIndex(node), node)
                 s.HeapifyAtposition(s.LeftChildIndex(node))
                 return True
@@ -455,11 +449,10 @@ class Distribution:
             return random.uniform(self.__a, self.__b)
 
         elif self.__type is distType['normal']:
-            return random.gauss(self.__mean, (self.__variance) ** 0.5)
+            return random.gauss(self.__mean, (self.__variance) ** 2)
 
         elif self.__type is distType['exponential']:
-            return random.expovariate(lambd=self.__lambda)
-            #return -(1.0 / self.__lambda) * math.log(1.0 - random.uniform(0, 1))  # by default log uses base e
+            return -(1.0 / self.__lambda) * math.log(1.0 - random.uniform(0, 1))  # by default log uses base e
 
         else:
             raise Exception('Distribution not handled by sample()')
@@ -469,30 +462,25 @@ class Simulation:
 
     def __init__(self):
 
-        """
-
-        :rtype : None
-        """
         self.idCtr=1000 #TODO: this is being used by self.getUniqueRequestId(), remove this when that function changes
 
 
-        self.config = ConfigParser.ConfigParser()
-        self.config.read('simulation.cfg')
+        config = ConfigParser.ConfigParser()
+        config.read('simulation.cfg')
 
-        self.randomSeed = self.config.getint('System', 'randomSeed')
-        self.numClients=self.config.getint('Simulation', 'numClients')
-        self.numRequestProcess = self.config.getint('Simulation','numRequestProcess')
+        self.randomSeed = config.getint('System', 'randomSeed')
+        self.numClients=config.getint('Simulation', 'numClients')
 
-        self.serviceTimeDist = self.GetDistributionObject(self.config, 'ServiceTime')
-        self.thinkTimeDist = self.GetDistributionObject(self.config, 'ThinkTime')
-        self.timeoutDist = self.GetDistributionObject(self.config, 'Timeout')
+        serviceTimeDist = self.GetDistributionObject(config, 'ServiceTime')
+        thinkTimeDist = self.GetDistributionObject(config, 'ThinkTime')
+        timeoutDist = self.GetDistributionObject(config, 'Timeout')
 
-        self.system = System(self.serviceTimeDist, self.thinkTimeDist, self.timeoutDist,
-                             self.config.getint('System', 'numProcessors'),
-                             self.config.getfloat('Processor', 'contextSwitchTime'),
-                             self.config.getfloat('Processor', 'timeQuantum'),
-                             self.config.getint('System', 'maxThreads'),
-                             self.config.getint('System', 'bufferSize'))
+        self.system = System(serviceTimeDist, thinkTimeDist, timeoutDist,
+                             config.getint('System', 'numProcessors'),
+                             config.getfloat('Processor', 'contextSwitchTime'),
+                             config.getfloat('Processor', 'timeQuantum'),
+                             config.getint('System', 'maxThreads'),
+                             config.getint('System', 'bufferSize'))
 
         self.eventList = EventList()
 
@@ -500,10 +488,7 @@ class Simulation:
         self.requestList=[] #list of requests that are circulating in the system
         self.InitRequestList()
 
-    @property
-    def currentTime(self):
-        return self.system.clock.getTime()
-    
+
     def InitRequestList(self):
         system=self.system
         currentTime=self.system.clock.getTime()
@@ -540,18 +525,15 @@ class Simulation:
 
     def jarvis(self):
         eventsProcessed=0
-        departureEventsProcessed=0
-
         #while(not self.eventList.IsEmpty):
-        while(departureEventsProcessed<self.numRequestProcess):
+        while(eventsProcessed<10000):
             event=self.eventList.PopEvent()
-            departureEventsProcessed += self.EventHandler(event)
+            self.EventHandler(event)
             eventsProcessed += 1
-        return departureEventsProcessed
+        return eventsProcessed
 
     def EventHandler(self, event):
         #update system clock
-        #return 1 if departure event, since we are counting them, other events return 0
         self.system.clock.setTime(event.timeStamp)
 
         if event.eventType==eventType['arrival']:
@@ -564,10 +546,8 @@ class Simulation:
             self.HandleTimeout(event)
         elif event.eventType==eventType['departure']:
             self.HandleDeparture(event)
-            return 1
         else:
             raise Exception('Unknown event type')
-        return 0
 
 
     # Add a scheduleNext event to the eventList, and update the processors
@@ -626,7 +606,6 @@ class Simulation:
             print '['+str(event.timeStamp)+']'+" Arrival of Request " + str(event.data)
 
         requestDropped=0 #status flag
-        requestInBuffer=False #status flag
         reqId=event.data
         currentTime=self.system.clock.getTime()
 
@@ -650,8 +629,6 @@ class Simulation:
                 if self.system.reqBuffer.QueueRequest(request) == -1:#buffer full
                     self.dropRequest(request)
                     requestDropped=1
-                else:
-                    requestInBuffer=True
             else:#threadpool not full
 
                 if request.serviceTime < self.system.timeQuantum:
@@ -670,17 +647,13 @@ class Simulation:
                     leastBusyProcessorSize=len(i.runQueue)
 
             if self.system.threadPool.AllocateThread(request,
-                                                     leastBusyProcessor) == -1:
-                if self.system.reqBuffer.QueueRequest(
-                        request) == -1:
-                #threadPool full
-                #buffer full
-                    self.dropRequest(request)
-                    requestDropped=1
-                else:
-                    requestInBuffer=True
-
-        if requestDropped == 0 and not event.cancelled : #and not event.cancelled was added to handle the hackish way we are scheduling an event picket from reqBuffer in HandleDeparture, where we just schedule it's arrival at the current time. without this part of code it there were multiple timeoutEvents that ere being created for the same event if the event were moved to buffer in HandleArrival on not finding a free thread.
+                                                     leastBusyProcessor) == -1 and self.system.reqBuffer.QueueRequest(
+                    request) == -1:
+            #threadPool full
+            #buffer full
+                self.dropRequest(request)
+                requestDropped=1
+        if requestDropped == 0:
             #if request was not dropped, schedule a timeout event for it
             self.createEvent(request.timeStamp+request.timeout,eventType['timeout'],request.reqId)
 
@@ -718,7 +691,7 @@ class Simulation:
         if not timedOut:
             if not self.system.reqBuffer.isEmpty():
                 nextRequest = self.system.reqBuffer.DequeueRequest()
-                self.createEvent(currentTime,eventType['arrival'],nextRequest.reqId,1) # HACK
+                self.createEvent(currentTime,eventType['arrival'],nextRequest.reqId) # HACK
 
 
         #free thread
@@ -733,7 +706,7 @@ class Simulation:
             #request hasn't timed out
             #event=self.eventList.searchTimeoutEvent(request.reqId)
             self.eventList.searchTimeoutEvent(request.reqId).cancelled=1
-            self.eventList.RemoveEvent(eventType['timeout'], request.reqId)
+            #self.eventList.RemoveEvent(eventType['timeout'], request.reqId)
 
         #set processor state, create schedule next event
 
@@ -743,9 +716,6 @@ class Simulation:
             processor.state=processorState['contextSwitch']
             self.createEvent(currentTime+self.system.contextSwitchTime,eventType['scheduleNext'],processor.procId)
 
-        global totRespTime
-        totRespTime += self.currentTime - request.timeStamp #debug
-
 
 
     def HandleTimeout(self,event):
@@ -753,7 +723,6 @@ class Simulation:
 
         #create new request in thinking state
         if event.cancelled==1: #this timeout event was cancelled since event departed before timeout
-            print '['+str(event.timeStamp)+']'+" Timeout(Cancelled) of Request " + str(event.data)
             return
 
         currentTime=self.system.clock.getTime()
@@ -816,29 +785,21 @@ class Simulation:
             if i not in self.requestIdList:
                 return i;
 
-    def createRequest(self, requestState, timeStamp, uniqueId, serviceTime, timeOut):
+    def createRequest(self, requestState, currentTime, uniqueId, serviceTime, timeOut):
         if uniqueId in self.requestIdList:
             raise Exception('Id already Exists')
 
-        newRequest=Request(requestState,timeStamp,uniqueId,serviceTime,timeOut)
+        newRequest=Request(requestState,currentTime,uniqueId,serviceTime,timeOut)
         self.requestList.append(newRequest)
         self.requestIdList.append(uniqueId)
         return newRequest
 
-    def createEvent(self, timeStamp, eventType, data,cancelled=0):
-        #cancelled=0 was added to handle the hackish way we are scheduling an event picket from reqBuffer in HandleDeparture, where we just schedule it's arrival at the current time. without this part of code it there were multiple timeoutEvents that ere being created for the same event if the event were moved to buffer in HandleArrival on not finding a free thread.
-
+    def createEvent(self, timeStamp, eventType, data):
         if data is None:
             raise Exception("Event Data is None!")
-        newEvent=Event(timeStamp,eventType,data,cancelled)
+        newEvent=Event(timeStamp,eventType,data)
         self.eventList.AddEvent(newEvent)
         return newEvent
 
 
-sim=Simulation()
-departures=sim.start()
-throughput=departures/sim.currentTime
-avgRespTime = totRespTime/departures
-
-print "throughput",throughput
-print "average Response time", avgRespTime
+print Simulation().start()
