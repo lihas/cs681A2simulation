@@ -8,6 +8,9 @@ import ConfigParser
 
 printMetrics = True
 
+#debug To calculate the average response time
+totRespTime = 0
+
 class Clock():
     def __init__(self,time=0):
         self.__time = time
@@ -452,10 +455,11 @@ class Distribution:
             return random.uniform(self.__a, self.__b)
 
         elif self.__type is distType['normal']:
-            return random.gauss(self.__mean, (self.__variance) ** 2)
+            return random.gauss(self.__mean, (self.__variance) ** 0.5)
 
         elif self.__type is distType['exponential']:
-            return -(1.0 / self.__lambda) * math.log(1.0 - random.uniform(0, 1))  # by default log uses base e
+            return random.expovariate(lambd=self.__lambda)
+            #return -(1.0 / self.__lambda) * math.log(1.0 - random.uniform(0, 1))  # by default log uses base e
 
         else:
             raise Exception('Distribution not handled by sample()')
@@ -465,6 +469,10 @@ class Simulation:
 
     def __init__(self):
 
+        """
+
+        :rtype : None
+        """
         self.idCtr=1000 #TODO: this is being used by self.getUniqueRequestId(), remove this when that function changes
 
 
@@ -473,6 +481,7 @@ class Simulation:
 
         self.randomSeed = self.config.getint('System', 'randomSeed')
         self.numClients=self.config.getint('Simulation', 'numClients')
+        self.numRequestProcess = self.config.getint('Simulation','numRequestProcess')
 
         self.serviceTimeDist = self.GetDistributionObject(self.config, 'ServiceTime')
         self.thinkTimeDist = self.GetDistributionObject(self.config, 'ThinkTime')
@@ -491,7 +500,10 @@ class Simulation:
         self.requestList=[] #list of requests that are circulating in the system
         self.InitRequestList()
 
-
+    @property
+    def currentTime(self):
+        return self.system.clock.getTime()
+    
     def InitRequestList(self):
         system=self.system
         currentTime=self.system.clock.getTime()
@@ -528,15 +540,18 @@ class Simulation:
 
     def jarvis(self):
         eventsProcessed=0
+        departureEventsProcessed=0
+
         #while(not self.eventList.IsEmpty):
-        while(eventsProcessed<10000):
+        while(departureEventsProcessed<self.numRequestProcess):
             event=self.eventList.PopEvent()
-            self.EventHandler(event)
+            departureEventsProcessed += self.EventHandler(event)
             eventsProcessed += 1
-        return eventsProcessed
+        return departureEventsProcessed
 
     def EventHandler(self, event):
         #update system clock
+        #return 1 if departure event, since we are counting them, other events return 0
         self.system.clock.setTime(event.timeStamp)
 
         if event.eventType==eventType['arrival']:
@@ -549,8 +564,10 @@ class Simulation:
             self.HandleTimeout(event)
         elif event.eventType==eventType['departure']:
             self.HandleDeparture(event)
+            return 1
         else:
             raise Exception('Unknown event type')
+        return 0
 
 
     # Add a scheduleNext event to the eventList, and update the processors
@@ -726,6 +743,9 @@ class Simulation:
             processor.state=processorState['contextSwitch']
             self.createEvent(currentTime+self.system.contextSwitchTime,eventType['scheduleNext'],processor.procId)
 
+        global totRespTime
+        totRespTime += self.currentTime - request.timeStamp #debug
+
 
 
     def HandleTimeout(self,event):
@@ -815,4 +835,10 @@ class Simulation:
         return newEvent
 
 
-print Simulation().start()
+sim=Simulation()
+departures=sim.start()
+throughput=departures/sim.currentTime
+avgRespTime = totRespTime/departures
+
+print "throughput",throughput
+print "average Response time", avgRespTime
