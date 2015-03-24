@@ -1,0 +1,11 @@
+TESTING THE CORRECTNESS OF THE SIMULATOR:
+#########################################
+
+Test 1: Verified Little's Law.
+	Refer to config file simulation_littles-law.cfg
+
+Test 2: Verified Throughput using MVA.
+	Using the file mva.py (1 processor)
+
+Test 3: Verified Asymptotic value of the response time.
+	Rsys = M/u - think_time
