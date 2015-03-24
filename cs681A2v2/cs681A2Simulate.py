@@ -851,8 +851,9 @@ class graphics:
             self.__graphicsOn=False
         else:
             pygame.init()
-            self.__font=pygame.font.SysFont('arial',15)
-            self.__screen=pygame.display.set_mode((640,480),0,32)
+            self.__font=pygame.font.SysFont('liberationmono',15)
+            self.__font_small=pygame.font.SysFont('liberationmono',10)
+            self.__screen=pygame.display.set_mode((640*2,480*2),0,32)
             pygame.display.set_caption('cs681 simulator')
 
             #colors:
@@ -895,7 +896,11 @@ class graphics:
         self.__screen.blit(text,centre)
 
         for i in range(min(10,len(queue))):
+            request=queue[i]
+            self.pygame.draw.rect(self.__screen,self.GREY,(centre[0]-75,centre[1]+80+i*31,150,30),0) #claring previous contents
             self.pygame.draw.rect(self.__screen,self.GREY,(centre[0]-75,centre[1]+80+i*31,150,30),1)
+            self.__font_small.render(request.reqId,request.remServiceTime)
+
 
 
 
