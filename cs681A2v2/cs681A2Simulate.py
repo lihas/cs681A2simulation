@@ -854,11 +854,15 @@ class graphics:
             self.__font=pygame.font.SysFont('arial',15)
             self.__screen=pygame.display.set_mode((640,480),0,32)
             pygame.display.set_caption('cs681 simulator')
+
+            #colors:
             self.WHITE=(255,255,255)
             self.BLACK=(0,0,0)
             self.RED=(255,0,0)
             self.GREEN=(0,255,0)
             self.BLUE=(0,0,255)
+            self.GREY=(200,200,200)
+
             self.__screen.fill(self.WHITE)
             pygame.display.update()
 
@@ -881,16 +885,17 @@ class graphics:
 
             text=self.__font.render('P'+str(i),True,self.BLACK,self.WHITE)
             self.__screen.blit(text,(xcord-60,ycord-70))
-            self.pygame.draw.circle(self.__screen,self.BLACK,(xcord,ycord),60,1)
+            self.pygame.draw.circle(self.__screen,self.GREY,(xcord,ycord),60,1)
 
     @wrapper
     def updateProcessorState(self,pId,state,queue):
-        centre=(80+160*pId)
+        centre=(80+160*pId,80)
         self.pygame.draw.circle(self.__screen,self.WHITE,centre,58,0) #clear inside of processor's circle
-        self.__font.render(state,True,self.BLACK,self.WHITE)
+        text=self.__font.render(state,True,self.BLACK,self.WHITE)
+        self.__screen.blit(text,centre)
 
         for i in range(min(10,len(queue))):
-            self.pygame.draw.rect(self.__screen,self.BLACK,(centre[0],centre[1]+80+i*31,160,30),1)
+            self.pygame.draw.rect(self.__screen,self.GREY,(centre[0]-75,centre[1]+80+i*31,150,30),1)
 
 
 
@@ -901,8 +906,9 @@ class graphics:
 
 
 
-g.createProcessors()
 g=graphics()
+g.createProcessors()
+
 
 sim=Simulation()
 departures=sim.start()
