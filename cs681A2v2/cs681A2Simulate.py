@@ -13,6 +13,8 @@ totRespTime = 0
 
 #debug gui
 g=None
+s=None
+#debug gui end
 
 class Clock():
     def __init__(self,time=0):
@@ -239,6 +241,10 @@ class Processor:
     def ScheduleNext(self):
         prevRequest = self.RemoveRequest()
         self.AddRequest(prevRequest)
+        #debug gui
+        g.updateProcessorState(self.procId,['idle','busy','context switch'][self.state],self.runQueue)
+        g.showBuffer(s)
+        #debug gui end
         return prevRequest
 
 
@@ -475,6 +481,7 @@ class Simulation:
         """
 
         :rtype : None
+
         """
         self.idCtr=1000 #TODO: this is being used by self.getUniqueRequestId(), remove this when that function changes
 
@@ -893,13 +900,46 @@ class graphics:
         centre=(80+160*pId,80)
         self.pygame.draw.circle(self.__screen,self.WHITE,centre,58,0) #clear inside of processor's circle
         text=self.__font.render(state,True,self.BLACK,self.WHITE)
-        self.__screen.blit(text,centre)
+        self.__screen.blit(text,(centre[0]-20,centre[1]-15))
+        text=self.__font_small.render('Q-size '+str(len(queue)),True,self.BLACK,self.WHITE)
+        self.__screen.blit(text,(centre[0]-20,centre[1]-15))
+
+        for i in range(10):
+            recCord=(centre[0]-75,centre[1]+80+i*31,150,30)
+            self.pygame.draw.rect(self.__screen,self.WHITE,recCord,0) #claring previous contents
 
         for i in range(min(10,len(queue))):
             request=queue[i]
-            self.pygame.draw.rect(self.__screen,self.GREY,(centre[0]-75,centre[1]+80+i*31,150,30),0) #claring previous contents
-            self.pygame.draw.rect(self.__screen,self.GREY,(centre[0]-75,centre[1]+80+i*31,150,30),1)
-            self.__font_small.render(request.reqId,request.remServiceTime)
+            recCord=(centre[0]-75,centre[1]+80+i*31,150,30)
+            self.pygame.draw.rect(self.__screen,self.WHITE,recCord,0) #clearing previous contents
+            self.pygame.draw.rect(self.__screen,self.GREY,recCord,1)
+            text=self.__font_small.render('reqId '+str(request.reqId),True,self.BLACK,self.WHITE)
+            self.__screen.blit(text,recCord)
+            text=self.__font_small.render('remST '+str(request.remServiceTime),True,self.BLACK,self.WHITE)
+            self.__screen.blit(text,(recCord[0],recCord[1]+self.__font_small.get_height()))
+
+    @wrapper
+    def showBuffer(self,s):
+        buffer=s.system.reqBuffer.requestQueue
+        centre=(720,20)
+        self.pygame.draw.rect(self.__screen,self.WHITE,(centre[0],centre[1],160,100),2)
+        self.pygame.draw.rect(self.__screen,self.GREY,(centre[0],centre[1],160,100),2)
+        text=self.__font_small.render('Buffer (size= '+str(len(buffer))+')',True,self.BLACK,self.WHITE)
+        self.__screen.blit(text,(centre[0]+20,centre[1]+20))
+
+        for i in range(10):
+            recCord=(centre[0],centre[1]+240+i*31,150,30)
+            self.pygame.draw.rect(self.__screen,self.WHITE,recCord,0) #claring previous contents
+        for i in range(min(10,len(buffer))):
+            request=buffer[i]
+            recCord=(centre[0]+5,centre[1]+110+i*31,150,30)
+            self.pygame.draw.rect(self.__screen,self.WHITE,recCord,0) #clearing previous contents
+            self.pygame.draw.rect(self.__screen,self.GREY,recCord,1)
+            text=self.__font_small.render('reqId '+str(request.reqId),True,self.BLACK,self.WHITE)
+            self.__screen.blit(text,recCord)
+            text=self.__font_small.render('remST '+str(request.remServiceTime),True,self.BLACK,self.WHITE)
+            self.__screen.blit(text,(recCord[0],recCord[1]+self.__font_small.get_height()))
+
 
 
 
@@ -916,6 +956,11 @@ g.createProcessors()
 
 
 sim=Simulation()
+
+#gui debug
+s=sim
+#gui debug end
+
 departures=sim.start()
 throughput=departures/sim.currentTime
 avgRespTime = totRespTime/departures
