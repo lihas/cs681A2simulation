@@ -12,9 +12,11 @@ printMetrics = True
 totRespTime = 0
 
 #debug gui
+import sys
 g=None
 s=None
 dep=None
+pause_key=False
 #debug gui end
 
 class Clock():
@@ -246,6 +248,7 @@ class Processor:
         g.updateProcessorState(self.procId,['idle','busy','context switch'][self.state],self.runQueue)
         g.showBuffer(s)
         g.drawThroughputGraph(s)
+        g.handleInput()
         #debug gui end
         return prevRequest
 
@@ -979,6 +982,48 @@ class graphics:
         for i in range(self._tp_graph_x,fwd_clean+1):
                 for j in range(100):
                     pixelarray[i][300*2-j]=self.WHITE
+
+    @wrapper
+    def handleInput(self):
+        for i in self.pygame.event.get():
+            print i
+            if i.type==self.pygame.QUIT:
+                exit()
+
+        kbd=self.pygame.key.get_pressed()
+        pause=kbd[self.pygame.K_PAUSE]
+        plus=kbd[self.pygame.K_PLUS]
+        minus=kbd[self.pygame.K_MINUS]
+        print 'pause',pause,'plus',plus,'minus',minus
+
+        global pause_key
+
+        if pause_key:
+            while True:
+                kbd=self.pygame.key.get_pressed()
+                pause=kbd[self.pygame.K_PAUSE]
+                plus=kbd[self.pygame.K_PLUS]
+                minus=kbd[self.pygame.K_MINUS]
+                if minus:
+                    pause_key=False
+
+                if plus:
+                    return
+        if pause:
+            pause_key=True
+
+        return
+        mouse=self.pygame.mouse
+        mp=mouse.get_pos()
+        if pause_key:
+            while True:
+                mp=mouse.get_pos()
+                if mp[0]<160 and mp[1]<160:
+                    pause_key=True
+                if mp[0]>=160 and mp[1]<160 and mp[0]<320:
+                    pause_key=False
+                if mp[0]>302 and mp[1]<160 and mp[0]<480:
+                    return
 
 
 
