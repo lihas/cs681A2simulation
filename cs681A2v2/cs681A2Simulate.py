@@ -14,6 +14,7 @@ totRespTime = 0
 #debug gui
 g=None
 s=None
+dep=None
 #debug gui end
 
 class Clock():
@@ -244,6 +245,7 @@ class Processor:
         #debug gui
         g.updateProcessorState(self.procId,['idle','busy','context switch'][self.state],self.runQueue)
         g.showBuffer(s)
+        g.drawThroughputGraph(s)
         #debug gui end
         return prevRequest
 
@@ -557,6 +559,10 @@ class Simulation:
             event=self.eventList.PopEvent()
             departureEventsProcessed += self.EventHandler(event)
             eventsProcessed += 1
+            #gui debug
+            global dep
+            dep=departureEventsProcessed
+            #gui debug end
         return departureEventsProcessed
 
     def EventHandler(self, event):
@@ -860,7 +866,7 @@ class graphics:
             pygame.init()
             self.__font=pygame.font.SysFont('liberationmono',15)
             self.__font_small=pygame.font.SysFont('liberationmono',10)
-            self.__screen=pygame.display.set_mode((640*2,480*2),0,32)
+            self.__screen=pygame.display.set_mode((640*2,300*2),0,32)
             pygame.display.set_caption('cs681 simulator')
 
             #colors:
@@ -873,6 +879,9 @@ class graphics:
 
             self.__screen.fill(self.WHITE)
             pygame.display.update()
+
+            #debug
+            self._tp_graph_x=0
 
     def wrapper(function):
         from functools import wraps
@@ -940,6 +949,36 @@ class graphics:
             text=self.__font_small.render('remST '+str(request.remServiceTime),True,self.BLACK,self.WHITE)
             self.__screen.blit(text,(recCord[0],recCord[1]+self.__font_small.get_height()))
 
+        throughput=int((dep*1.0/s.currentTime)*10)
+        text=self.__font_small.render('Throughput '+str(throughput)+'req/sec',True,self.BLACK,self.WHITE)
+        self.__screen.blit(text,(0,500))
+
+
+    @wrapper
+    def drawThroughputGraph(self,s):
+        throughput=int((dep*1.0/s.currentTime)*10)
+        pixelarray=self.pygame.PixelArray(self.__screen)
+
+
+        if(self._tp_graph_x>=640):
+            self._tp_graph_x=0
+            # for i in range(640):
+            #     for j in range(100):
+            #         pixelarray[i][300*2-j]=self.WHITE
+
+
+        pixelarray[self._tp_graph_x][300*2-throughput]=self.GREY
+        self._tp_graph_x += 1
+
+
+        if self._tp_graph_x+50>=640:
+            fwd_clean=640
+        else:
+            fwd_clean=self._tp_graph_x+50
+
+        for i in range(self._tp_graph_x,fwd_clean+1):
+                for j in range(100):
+                    pixelarray[i][300*2-j]=self.WHITE
 
 
 
