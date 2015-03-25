@@ -952,6 +952,8 @@ class graphics:
             text=self.__font_small.render('remST '+str(request.remServiceTime),True,self.BLACK,self.WHITE)
             self.__screen.blit(text,(recCord[0],recCord[1]+self.__font_small.get_height()))
 
+        text=self.__font_small.render('press PAUSE to pause execution, - to unpause, ESC to step through in paused mode',True,self.BLUE,self.WHITE)
+        self.__screen.blit(text,(0,450))
         throughput=int((dep*1.0/s.currentTime)*10)
         text=self.__font_small.render('Throughput '+str(throughput)+'req/sec',True,self.BLACK,self.WHITE)
         self.__screen.blit(text,(0,500))
@@ -992,42 +994,32 @@ class graphics:
 
         kbd=self.pygame.key.get_pressed()
         pause=kbd[self.pygame.K_PAUSE]
-        plus=kbd[self.pygame.K_PLUS]
+        esc=kbd[self.pygame.K_ESCAPE]
         minus=kbd[self.pygame.K_MINUS]
-        print 'pause',pause,'plus',plus,'minus',minus
+        #print 'pause',pause,'esc',esc,'minus',minus
+        #self.pygame.event.pump()
 
         global pause_key
 
         if pause_key:
             while True:
+
                 kbd=self.pygame.key.get_pressed()
                 pause=kbd[self.pygame.K_PAUSE]
-                plus=kbd[self.pygame.K_PLUS]
+                esc=kbd[self.pygame.K_ESCAPE]
                 minus=kbd[self.pygame.K_MINUS]
+                #print 'pause',pause,'esc',esc,'minus',minus
                 if minus:
                     pause_key=False
-
-                if plus:
+                    break
+                if esc:
                     return
-        if pause:
+                self.pygame.event.pump()
+        elif pause:
             pause_key=True
+            self.pygame.event.pump()
 
         return
-        mouse=self.pygame.mouse
-        mp=mouse.get_pos()
-        if pause_key:
-            while True:
-                mp=mouse.get_pos()
-                if mp[0]<160 and mp[1]<160:
-                    pause_key=True
-                if mp[0]>=160 and mp[1]<160 and mp[0]<320:
-                    pause_key=False
-                if mp[0]>302 and mp[1]<160 and mp[0]<480:
-                    return
-
-
-
-
 
 
 
